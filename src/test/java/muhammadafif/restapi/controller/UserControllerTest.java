@@ -2,11 +2,15 @@ package muhammadafif.restapi.controller;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import muhammadafif.restapi.model.dao.User;
 import muhammadafif.restapi.model.dto.RegisterUserRequest;
+import muhammadafif.restapi.model.dto.UserResponse;
 import muhammadafif.restapi.model.dto.WebResponse;
 import muhammadafif.restapi.repository.UserRepository;
+import muhammadafif.restapi.security.BCrypt;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mock;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -40,7 +44,7 @@ class UserControllerTest {
     void testRegisterSuccess() throws Exception {
         RegisterUserRequest request = new RegisterUserRequest();
         request.setUsername("lele");
-        request.setPassword("password");
+        request.setPassword(BCrypt.hashpw("password", BCrypt.gensalt()));
         request.setName("lele goreng");
 
         mockMvc.perform(
@@ -51,10 +55,138 @@ class UserControllerTest {
         ).andExpectAll(
                 status().isOk()
         ).andDo(result -> {
-            WebResponse<String> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<WebResponse<String>>() {
+            WebResponse<String> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {
             });
 
             assertEquals("OK", response.getData());
+        });
+    }
+
+    @Test
+    void testRegisterBadRequest() throws Exception {
+        RegisterUserRequest request = new RegisterUserRequest();
+        request.setUsername("");
+        request.setPassword("");
+        request.setName("");
+
+        mockMvc.perform(
+                post("/api/users")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+        ).andExpectAll(
+                status().isBadRequest()
+        ).andDo(result -> {
+            WebResponse<String> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {
+            });
+
+            assertNotNull(response.getErrors());
+        });
+    }
+
+    @Test
+    void testDuplicateUser() throws Exception {
+        User user = new User();
+        user.setUsername("lele");
+        user.setName("lele goreng");
+        user.setPassword("password");
+        userRepository.save(user);
+
+        RegisterUserRequest request = new RegisterUserRequest();
+        request.setUsername("lele");
+        request.setPassword("password");
+        request.setName("apiipp");
+
+        mockMvc.perform(
+                post("/api/users")
+                        .accept(MediaType.APPLICATION_JSON)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+        ).andExpectAll(
+                status().isBadRequest()
+        ).andDo(result -> {
+            WebResponse<String> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {
+            });
+
+            assertNotNull(response.getErrors());
+            assertEquals(response.getErrors(), "Username already exists");
+        });
+    }
+
+    @Test
+    void getUserUnauthorizedTokenNotFound() throws Exception {
+        mockMvc.perform(
+                get("/api/users/current")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-API-TOKEN", "notfound")
+        ).andExpectAll(
+                status().isUnauthorized()
+        ).andDo(result -> {
+            WebResponse<String> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {});
+            assertNotNull(response.getErrors());
+        });
+    }
+
+    @Test
+    void getUserUnauthorizedTokenNotSend() throws Exception {
+        mockMvc.perform(
+                get("/api/users/current")
+                        .contentType(MediaType.APPLICATION_JSON)
+        ).andExpectAll(
+                status().isUnauthorized()
+        ).andDo(result -> {
+            WebResponse<String> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {});
+            assertNotNull(response.getErrors());
+        });
+    }
+
+    @Test
+    void getUserSuccess() throws Exception {
+        User user = new User();
+        user.setUsername("lele");
+        user.setPassword(BCrypt.hashpw("password", BCrypt.gensalt()));
+        user.setName("lele goreng");
+        user.setToken("test");
+        user.setTokenExpiredAt(System.currentTimeMillis() + 10000000000000L);
+        userRepository.save(user);
+
+        mockMvc.perform(
+                get("/api/users/current")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-API-TOKEN", "test")
+        ).andExpectAll(
+                status().isOk()
+        ).andDo(result -> {
+            WebResponse<UserResponse> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {});
+            assertNull(response.getErrors());
+            assertNotNull(response.getData());
+
+            User userDB = userRepository.findFirstByToken("test").orElse(null);
+            assertEquals(response.getData().getUsername(), userDB.getUsername());
+            assertEquals(response.getData().getName(), userDB.getName());
+        });
+    }
+
+    @Test
+    void getUserUnauthorizedTokenExpired() throws Exception {
+        User user = new User();
+        user.setUsername("lele");
+        user.setPassword(BCrypt.hashpw("password", BCrypt.gensalt()));
+        user.setName("lele goreng");
+        user.setToken("test");
+        user.setTokenExpiredAt(System.currentTimeMillis() - 10000000000000L);
+        userRepository.save(user);
+
+        mockMvc.perform(
+                get("/api/users/current")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .header("X-API-TOKEN", "test")
+        ).andExpectAll(
+                status().isUnauthorized()
+        ).andDo(result -> {
+            WebResponse<String> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {});
+            assertNotNull(response.getErrors());
+            assertNull(response.getData());
         });
     }
 }

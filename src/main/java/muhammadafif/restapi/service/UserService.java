@@ -5,6 +5,7 @@ import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 import muhammadafif.restapi.model.dao.User;
 import muhammadafif.restapi.model.dto.RegisterUserRequest;
+import muhammadafif.restapi.model.dto.UserResponse;
 import muhammadafif.restapi.repository.UserRepository;
 import muhammadafif.restapi.security.BCrypt;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,12 +25,12 @@ public class UserService {
     @Autowired
     private Validator validator;
 
+    @Autowired
+    private ValidationService validationService;
+
     @Transactional
-    public void Register(RegisterUserRequest request){
-        Set<ConstraintViolation<RegisterUserRequest>> validate = validator.validate(request);
-        if(!validate.isEmpty()){
-            throw new ConstraintViolationException(validate);
-        }
+    public void register(RegisterUserRequest request){
+        validationService.validate(request);
 
         if(userRepository.existsById(request.getUsername())){
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Username already exists");
@@ -40,5 +41,9 @@ public class UserService {
         user.setName(request.getName());
         user.setPassword(BCrypt.hashpw(request.getPassword(), BCrypt.gensalt()));
         userRepository.save(user);
+    }
+
+    public UserResponse get(User user){
+        return UserResponse.builder().username(user.getUsername()).name(user.getName()).build();
     }
 }

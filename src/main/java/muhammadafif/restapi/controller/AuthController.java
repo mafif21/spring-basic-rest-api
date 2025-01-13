@@ -1,11 +1,13 @@
 package muhammadafif.restapi.controller;
 
+import muhammadafif.restapi.model.dao.User;
 import muhammadafif.restapi.model.dto.LoginUserRequest;
 import muhammadafif.restapi.model.dto.LoginUserResponse;
 import muhammadafif.restapi.model.dto.WebResponse;
 import muhammadafif.restapi.service.AuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,5 +21,11 @@ public class AuthController {
     public WebResponse<LoginUserResponse> login(@RequestBody LoginUserRequest request) {
         LoginUserResponse loginResponse = authService.login(request);
         return WebResponse.<LoginUserResponse>builder().data(loginResponse).build();
+    }
+
+    @DeleteMapping(path = "/api/auth/logout", produces = MediaType.APPLICATION_JSON_VALUE)
+    public WebResponse<String> delete(User user) {
+        authService.logout(user);
+        return WebResponse.<String>builder().data("OK").build();
     }
 }

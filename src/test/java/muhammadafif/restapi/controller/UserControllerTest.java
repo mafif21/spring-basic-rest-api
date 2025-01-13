@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import muhammadafif.restapi.model.dao.User;
 import muhammadafif.restapi.model.dto.RegisterUserRequest;
+import muhammadafif.restapi.model.dto.UpdateUserRequest;
 import muhammadafif.restapi.model.dto.UserResponse;
 import muhammadafif.restapi.model.dto.WebResponse;
 import muhammadafif.restapi.repository.UserRepository;
@@ -187,6 +188,58 @@ class UserControllerTest {
             WebResponse<String> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {});
             assertNotNull(response.getErrors());
             assertNull(response.getData());
+        });
+    }
+
+    @Test
+    void updateUserUnauthorizedTokenNotSend() throws Exception {
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setName("lele ganteng");
+        request.setPassword(BCrypt.hashpw("password", BCrypt.gensalt()));
+
+        mockMvc.perform(
+                patch("/api/users/current")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request))
+        ).andExpectAll(
+                status().isUnauthorized()
+        ).andDo(result -> {
+            WebResponse<String> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {});
+            assertNotNull(response.getErrors());
+        });
+    }
+
+    @Test
+    void updateUserSuccess() throws Exception {
+        User user = new User();
+        user.setUsername("lele");
+        user.setPassword(BCrypt.hashpw("password", BCrypt.gensalt()));
+        user.setName("lele goreng");
+        user.setToken("test");
+        user.setTokenExpiredAt(System.currentTimeMillis() + 10000000000000L);
+        userRepository.save(user);
+
+        UpdateUserRequest request = new UpdateUserRequest();
+        request.setName("lele ganteng");
+        request.setPassword(BCrypt.hashpw("kontolodone", BCrypt.gensalt()));
+
+        mockMvc.perform(
+                patch("/api/users/current")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .header("X-API-TOKEN", "test")
+                        .content(objectMapper.writeValueAsString(request))
+        ).andExpectAll(
+                status().isOk()
+        ).andDo(result -> {
+            WebResponse<UserResponse> response = objectMapper.readValue(result.getResponse().getContentAsString(), new TypeReference<>() {});
+            assertNull(response.getErrors());
+            assertNotNull(response.getData());
+
+            User userDB = userRepository.findFirstByToken("test").orElse(null);
+            assertEquals(response.getData().getName(), userDB.getName());
+            assertTrue(BCrypt.checkpw("kontolodone", userDB.getPassword()));
         });
     }
 }
